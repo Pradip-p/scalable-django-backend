@@ -1,0 +1,142 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Location Map</title>
+    <!-- Include Leaflet CSS and JavaScript -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+
+</head>
+<body>
+    <!-- Logout button -->
+    <a href="{% url 'logout' %}">Logout</a>
+
+    <h1 style="text-align: center;">Hi {{ request.user.first_name }} {{ request.user.last_name }}</h1>
+    
+
+    <form id="search-form">
+        <input type="text" id="location-query" placeholder="Enter location" onkeyup="searchLocation()" required >
+    </form>
+    
+    <!-- Form to submit delivery location -->
+    <form id="delivery-location-form">
+        {% csrf_token %}
+        <input type="hidden" id="address" name="address" required>
+        <input type="hidden" id="latitude" name="latitude" required>
+        <input type="hidden" id="longitude" name="longitude" required >
+        <button type="submit">Save Delivery Location</button></br>
+    </form>
+    
+    <!-- Map container -->
+    <div id="map"></div>
+    <script>
+        // Initialize Leaflet map
+        var map = L.map('map').setView([28.3949, 84.1240], 7); // Set initial center and zoom for Nepal
+
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Function to handle searching for locations
+        function searchLocation() {
+            var locationQuery = document.getElementById('location-query').value.trim();
+            if (locationQuery.length > 0) {
+                // Perform AJAX request to Nominatim API
+                fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + locationQuery)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            // Get the first result
+                            var result = data[0];
+                            
+                            // Clear existing markers
+                            map.eachLayer(function(layer) {
+                                if (layer instanceof L.Marker) {
+                                    map.removeLayer(layer);
+                                }
+                            });
+                            
+                            // Add marker for the searched location
+                            var marker = L.marker([result.lat, result.lon]).addTo(map)
+                                .bindPopup('<b>' + result.display_name + '</b>').openPopup();
+                            
+                            // Pan and zoom the map to the searched location
+                            map.setView([result.lat, result.lon], 13);
+
+                            // Update hidden inputs in the form
+                            document.getElementById('address').value = result.display_name;
+                            document.getElementById('latitude').value = result.lat;
+                            document.getElementById('longitude').value = result.lon;
+                        } else {
+                            console.log('Location not found');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while fetching data');
+                    });
+            }
+        }
+
+        // Parse GeoJSON data from backend
+        var deliveryLocations = {{ delivery_locations_json|safe }};
+
+        // Loop through delivery locations and add markers to the map
+        deliveryLocations.features.forEach(function(feature) {
+            var coordinates = feature.geometry.coordinates;
+            var address = feature.properties.address;
+            
+            // Add marker to the map
+            L.marker([coordinates[1], coordinates[0]])
+                .addTo(map)
+                .bindPopup(address);
+        });
+
+        // Function to handle form submission for delivery location
+        document.getElementById('delivery-location-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            // Get address, latitude, and longitude from the form
+            var address = document.getElementById('address').value;
+            var latitude = document.getElementById('latitude').value;
+            var longitude = document.getElementById('longitude').value;
+
+            // Check if any of the fields are empty
+            if (address === '' || latitude === '' || longitude === '') {
+                // Alert the user if any field is empty
+                alert('Please fill the real address !!!!');
+                return; // Exit the function early
+            }
+
+            // Perform AJAX request to submit the delivery location data
+            $.ajax({
+                url: '{% url "save_delivery_location" %}',
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                data: {
+                    'address': address,
+                    'latitude': latitude,
+                    'longitude': longitude
+                },
+                success: function(response) {
+                    window.location.reload();
+                    alert('Location saved successfully!');
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    alert('An error occurred while saving location');
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>

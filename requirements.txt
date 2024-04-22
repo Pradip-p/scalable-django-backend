@@ -1,0 +1,8 @@
+django-leaflet
+drf-yasg
+django-crontab
+load_dotenv
+django-debug-toolbar
+psycopg2-binary
+matplotlib
+Faker
